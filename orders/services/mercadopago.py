@@ -24,20 +24,27 @@ class MercadoPagoService:
         Cria uma Order no Mercado Pago usando o endpoint POST /v1/orders
         """
         url = f"{cls.BASE_URL}/v1/orders"
+        
+        # Limpeza e formatação de dados do cliente
         clean_cpf = order.customer_cpf.replace('.', '').replace('-', '').replace('/', '')
         doc_type = "CNPJ" if len(clean_cpf) > 11 else "CPF"
 
-        # Divisão do nome
         name_parts = order.customer_name.strip().split(' ', 1)
         first_name = name_parts[0]
         last_name = name_parts[1] if len(name_parts) > 1 else ""
 
-        # Cálculo do valor total (Aplica desconto de 5% no Pix se desejado)
-        total_value = float(order.total_amount)
+        # --- NOVO CÁLCULO DE TOTAL ISOLADO ---
+        # Soma os itens e calcula o valor base
+        items_total = sum(item.quantity * item.unit_price for item in order.items.all())
+        base_total = items_total + order.shipping_fee
+        total_value = float(base_total)
+        
         payment_method_type = payment_data.get('payment_method')
 
+        # Se for PIX, aplica 5% de desconto APENAS sobre o valor dos produtos
         if payment_method_type == 'pix':
-            total_value = float((order.total_amount - order.shipping_fee) * Decimal('0.95') + order.shipping_fee)
+            total_value = float((items_total * Decimal('0.95')) + order.shipping_fee)
+        # -------------------------------------
 
         transaction_payload = {
             "amount": round(total_value, 2)
@@ -46,7 +53,7 @@ class MercadoPagoService:
         if payment_method_type == 'card':
             card_info = payment_data.get('card', {})
             transaction_payload["payment_method"] = {
-                "id": card_info.get("payment_method_id"),  # ex: visa, master
+                "id": card_info.get("payment_method_id"),  
                 "type": card_info.get("payment_type_id", "credit_card"),
                 "token": card_info.get("token")
             }
@@ -84,7 +91,7 @@ class MercadoPagoService:
     @classmethod
     def get_order(cls, mp_order_id):
         """
-        Busca os dados de uma Order pelo ID do Mercado Pago
+        Busca os dados de uma Order pelo ID do Mercado Pago (usado no webhook)
         """
         url = f"{cls.BASE_URL}/v1/orders/{mp_order_id}"
         headers = {
