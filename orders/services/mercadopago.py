@@ -33,21 +33,21 @@ class MercadoPagoService:
         first_name = name_parts[0]
         last_name = name_parts[1] if len(name_parts) > 1 else ""
 
-        # --- NOVO CÁLCULO DE TOTAL ISOLADO ---
-        # Soma os itens e calcula o valor base
+        # --- CÁLCULO DE TOTAL ---
         items_total = sum(item.quantity * item.unit_price for item in order.items.all())
         base_total = items_total + order.shipping_fee
         total_value = float(base_total)
         
         payment_method_type = payment_data.get('payment_method')
 
-        # Se for PIX, aplica 5% de desconto APENAS sobre o valor dos produtos
         if payment_method_type == 'pix':
             total_value = float((items_total * Decimal('0.95')) + order.shipping_fee)
-        # -------------------------------------
 
+        total_value_rounded = round(total_value, 2)
+
+        # Monta a transação como OBJETO (Não mais como Array)
         transaction_payload = {
-            "amount": round(total_value, 2)
+            "amount": total_value_rounded
         }
 
         if payment_method_type == 'card':
@@ -64,11 +64,13 @@ class MercadoPagoService:
                 "id": "pix"
             }
 
+        # Payload Final corrigido
         payload = {
             "type": "online",
             "processing_mode": "automatic",
             "external_reference": str(order.id),
-            "transactions": [transaction_payload],
+            "total_amount": total_value_rounded,    # 1. Total isolado na raiz
+            "transactions": transaction_payload,      # 2. Passando como Objeto direto
             "payer": {
                 "email": order.customer_email,
                 "first_name": first_name,
@@ -76,6 +78,14 @@ class MercadoPagoService:
                 "identification": {
                     "type": doc_type,
                     "number": clean_cpf
+                },
+                "address": {                          # 3. Adicionado o Endereço Obrigatório
+                    "zip_code": order.zip_code,
+                    "street_name": order.street or "Não informado",
+                    "street_number": order.number or "S/N",
+                    "neighborhood": order.district or "Não informado",
+                    "city": order.city or "Não informado",
+                    "federal_unit": order.state or "SC"
                 }
             }
         }
