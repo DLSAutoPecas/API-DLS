@@ -25,7 +25,6 @@ class MercadoPagoService:
         """
         url = f"{cls.BASE_URL}/v1/orders"
         
-        # Limpeza e formatação de dados do cliente
         clean_cpf = order.customer_cpf.replace('.', '').replace('-', '').replace('/', '')
         doc_type = "CNPJ" if len(clean_cpf) > 11 else "CPF"
 
@@ -43,34 +42,37 @@ class MercadoPagoService:
         if payment_method_type == 'pix':
             total_value = float((items_total * Decimal('0.95')) + order.shipping_fee)
 
-        total_value_rounded = round(total_value, 2)
+        # 1. MP exige STRING na raiz do total_amount (ex: "150.00")
+        total_value_str = f"{total_value:.2f}"
 
-        # Monta a transação como OBJETO (Não mais como Array)
-        transaction_payload = {
-            "amount": total_value_rounded
+        # 2. Dados do pagamento
+        payment_payload = {
+            "amount": float(round(total_value, 2))
         }
 
         if payment_method_type == 'card':
             card_info = payment_data.get('card', {})
-            transaction_payload["payment_method"] = {
+            payment_payload["payment_method"] = {
                 "id": card_info.get("payment_method_id"),  
                 "type": card_info.get("payment_type_id", "credit_card"),
                 "token": card_info.get("token")
             }
-            transaction_payload["installments"] = int(payment_data.get("installments", 1))
+            payment_payload["installments"] = int(payment_data.get("installments", 1))
 
         elif payment_method_type == 'pix':
-            transaction_payload["payment_method"] = {
+            payment_payload["payment_method"] = {
                 "id": "pix"
             }
 
-        # Payload Final corrigido
+        # 3. Payload Final com a estrutura exata exigida pela API de Orders
         payload = {
             "type": "online",
             "processing_mode": "automatic",
             "external_reference": str(order.id),
-            "total_amount": total_value_rounded,    # 1. Total isolado na raiz
-            "transactions": transaction_payload,      # 2. Passando como Objeto direto
+            "total_amount": total_value_str,
+            "transactions": {
+                "payments": [payment_payload]             # Correção estrutural exigida
+            },
             "payer": {
                 "email": order.customer_email,
                 "first_name": first_name,
@@ -79,13 +81,12 @@ class MercadoPagoService:
                     "type": doc_type,
                     "number": clean_cpf
                 },
-                "address": {                          # 3. Adicionado o Endereço Obrigatório
+                "address": {                              # federal_unit removido
                     "zip_code": order.zip_code,
                     "street_name": order.street or "Não informado",
                     "street_number": order.number or "S/N",
                     "neighborhood": order.district or "Não informado",
-                    "city": order.city or "Não informado",
-                    "federal_unit": order.state or "SC"
+                    "city": order.city or "Não informado"
                 }
             }
         }
@@ -100,9 +101,6 @@ class MercadoPagoService:
 
     @classmethod
     def get_order(cls, mp_order_id):
-        """
-        Busca os dados de uma Order pelo ID do Mercado Pago (usado no webhook)
-        """
         url = f"{cls.BASE_URL}/v1/orders/{mp_order_id}"
         headers = {
             "Authorization": f"Bearer {settings.MERCADOPAGO_ACCESS_TOKEN}"

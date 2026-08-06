@@ -66,7 +66,6 @@ class OrderPaymentView(APIView):
             elif order_status in ['cancelled', 'rejected', 'expired']:
                 order.status = 'CANCELED'
 
-            # Resposta padronizada para o frontend
             response_data = {
                 'order_id': str(order.id),
                 'mp_order_id': mp_order_id,
@@ -74,26 +73,38 @@ class OrderPaymentView(APIView):
                 'status_detail': mp_response.get('status_detail', '')
             }
 
-            # Dados do Pix se for pagamento via Pix
-            transactions = mp_response.get('transactions', [])
-            if payment_method == 'pix' and transactions:
-                pix_tx = transactions[0].get('payment_method', {})
-                payment_info = transactions[0].get('payment_data', {}) or transactions[0]
+            # Extrator Inteligente de PIX (Acha o QR Code em qualquer nível do JSON)
+            if payment_method == 'pix':
+                def find_pix_data(data):
+                    if isinstance(data, dict):
+                        if 'qr_code' in data or 'qr_code_base64' in data:
+                            return data
+                        for k, v in data.items():
+                            res = find_pix_data(v)
+                            if res: return res
+                    elif isinstance(data, list):
+                        for item in data:
+                            res = find_pix_data(item)
+                            if res: return res
+                    return None
+
+                pix_info = find_pix_data(mp_response)
                 
-                qr_code = payment_info.get('qr_code') or pix_tx.get('qr_code')
-                qr_code_base64 = payment_info.get('qr_code_base64') or pix_tx.get('qr_code_base64')
-                ticket_url = payment_info.get('ticket_url') or pix_tx.get('ticket_url')
-                expiration_str = payment_info.get('date_of_expiration') or pix_tx.get('date_of_expiration')
+                if pix_info:
+                    qr_code = pix_info.get('qr_code')
+                    qr_code_base64 = pix_info.get('qr_code_base64')
+                    ticket_url = pix_info.get('ticket_url')
+                    expiration_str = pix_info.get('date_of_expiration')
 
-                if expiration_str:
-                    order.pix_expiration_date = parse_datetime(expiration_str)
+                    if expiration_str:
+                        order.pix_expiration_date = parse_datetime(expiration_str)
 
-                response_data['pix'] = {
-                    'text': qr_code,
-                    'qrcode64': qr_code_base64,
-                    'ticket_url': ticket_url,
-                    'expiration_date': expiration_str
-                }
+                    response_data['pix'] = {
+                        'text': qr_code,
+                        'qrcode64': qr_code_base64,
+                        'ticket_url': ticket_url,
+                        'expiration_date': expiration_str
+                    }
 
             order.save()
             return Response(response_data, status=status.HTTP_200_OK)
@@ -153,7 +164,7 @@ class ShippingSimulationView(APIView):
 
     def post(self, request):
         destination_cep = request.data.get('cep_destino', '').replace('-', '')
-        items = request.data.get('items', []) # Lista de { "product_id": "uuid", "quantity": 1 }
+        items = request.data.get('items', [])
 
         if not destination_cep or len(destination_cep) != 8:
             return Response({"error": "CEP de destino inválido."}, status=status.HTTP_400_BAD_REQUEST)
@@ -161,7 +172,6 @@ class ShippingSimulationView(APIView):
         if not items:
             return Response({"error": "O carrinho está vazio."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Monta um identificador para o Cache baseado no CEP + IDs e Quantidades dos itens
         cache_key_raw = f"{destination_cep}_" + "_".join([f"{item['product_id']}-{item['quantity']}" for item in sorted(items, key=lambda x: x['product_id'])])
         cache_key = hashlib.md5(cache_key_raw.encode('utf-8')).hexdigest()
 
@@ -173,8 +183,6 @@ class ShippingSimulationView(APIView):
         for item in items:
             try:
                 product = Product.objects.get(id=item['product_id'])
-                # A API do melhor envio precisa de medidas minimas para cotar. 
-                # Assumindo peso minimo de 0.1 e medidas de 10x10x10 se não houver cadastro.
                 products_data.append({
                     "id": str(product.id),
                     "width": float(product.width_cm) if getattr(product, 'width_cm', 0) > 0 else 10,
@@ -207,7 +215,6 @@ class ShippingSimulationView(APIView):
             
             melhor_envio_data = response.json()
             
-            # Filtra apenas os serviços válidos e sem erro. Retorna no contrato padronizado.
             shipping_options = []
             for option in melhor_envio_data:
                 if 'error' not in option and option.get('price'):
@@ -217,7 +224,6 @@ class ShippingSimulationView(APIView):
                         "deadline_days": option.get("delivery_time")
                     })
 
-            # Salva no cache por 1 hora (3600 segundos) para não estourar os limites da API
             cache.set(cache_key, shipping_options, 3600)
 
             return Response(shipping_options, status=status.HTTP_200_OK)
