@@ -1,6 +1,7 @@
 import uuid
 import logging
 import requests
+from decimal import Decimal
 from django.conf import settings
 from django.utils.dateparse import parse_datetime
 
