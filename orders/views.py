@@ -6,21 +6,17 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 import logging
 import requests
 import hashlib
+import stripe
 from decimal import Decimal
-from django.utils.dateparse import parse_datetime
 from django.conf import settings
 from django.core.cache import cache
 
 from .models import Order
 from .serializers import OrderSerializer, ShippingSimulationSerializer
 from catalog.models import Product
-from .services.mercadopago import MercadoPagoService
+from .services.stripe import create_stripe_checkout_session
 
 logger = logging.getLogger(__name__)
-
-# ==========================================
-# 1. VIEWS DE PEDIDOS E CHECKOUT
-# ==========================================
 
 class CheckoutView(generics.CreateAPIView):
     queryset = Order.objects.all()
@@ -31,11 +27,6 @@ class OrderListView(generics.ListAPIView):
     serializer_class = OrderSerializer
     permission_classes = [IsAuthenticated]
 
-
-# ==========================================
-# 2. VIEW DE INTEGRAÇÃO - MERCADO PAGO
-# ==========================================
-
 class OrderPaymentView(APIView):
     def post(self, request, order_id):
         try:
@@ -43,121 +34,54 @@ class OrderPaymentView(APIView):
         except Order.DoesNotExist:
             return Response({'error': 'Pedido não encontrado.'}, status=status.HTTP_404_NOT_FOUND)
 
-        payment_method = request.data.get('payment_method')
-        if payment_method not in ['card', 'pix']:
-            return Response({'error': 'Método de pagamento inválido.'}, status=status.HTTP_400_BAD_REQUEST)
-
         try:
-            # Envia a Order para o Mercado Pago
-            mp_response = MercadoPagoService.create_order(order, request.data)
-
-            mp_order_id = str(mp_response.get('id', ''))
-            order_status = mp_response.get('status', '').lower()
-
-            order.mercadopago_order_id = mp_order_id
-            order.payment_method = payment_method
-            order.payment_status = order_status
-
-            # Mapeamento do status
-            if order_status == 'processed' or order_status == 'approved':
-                order.status = 'PAID'
-            elif order_status in ['pending', 'action_required', 'in_process']:
-                order.status = 'PENDING'
-            elif order_status in ['cancelled', 'rejected', 'expired']:
-                order.status = 'CANCELED'
-
-            response_data = {
-                'order_id': str(order.id),
-                'mp_order_id': mp_order_id,
-                'status': order_status,
-                'status_detail': mp_response.get('status_detail', '')
-            }
-
-            # Extrator Inteligente de PIX (Acha o QR Code em qualquer nível do JSON)
-            if payment_method == 'pix':
-                def find_pix_data(data):
-                    if isinstance(data, dict):
-                        if 'qr_code' in data or 'qr_code_base64' in data:
-                            return data
-                        for k, v in data.items():
-                            res = find_pix_data(v)
-                            if res: return res
-                    elif isinstance(data, list):
-                        for item in data:
-                            res = find_pix_data(item)
-                            if res: return res
-                    return None
-
-                pix_info = find_pix_data(mp_response)
-                
-                if pix_info:
-                    qr_code = pix_info.get('qr_code')
-                    qr_code_base64 = pix_info.get('qr_code_base64')
-                    ticket_url = pix_info.get('ticket_url')
-                    expiration_str = pix_info.get('date_of_expiration')
-
-                    if expiration_str:
-                        order.pix_expiration_date = parse_datetime(expiration_str)
-
-                    response_data['pix'] = {
-                        'text': qr_code,
-                        'qrcode64': qr_code_base64,
-                        'ticket_url': ticket_url,
-                        'expiration_date': expiration_str
-                    }
-
+            session = create_stripe_checkout_session(order)
+            order.payment_method = 'stripe'
             order.save()
-            return Response(response_data, status=status.HTTP_200_OK)
 
-        except requests.exceptions.HTTPError as e:
-            error_data = e.response.json() if e.response else {}
-            logger.error("Erro no Mercado Pago: %s", error_data)
             return Response({
-                'error': error_data.get('message', 'Falha ao processar pagamento junto ao Mercado Pago.')
-            }, status=status.HTTP_400_BAD_REQUEST)
+                'order_id': str(order.id),
+                'session_id': session.id,
+                'checkout_url': session.url
+            }, status=status.HTTP_200_OK)
+
+        except stripe.error.StripeError as e:
+            logger.error("Erro na Stripe: %s", str(e))
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             logger.exception("Erro inesperado ao processar pagamento (order %s)", order_id)
             return Response({'error': 'Erro interno ao processar o pagamento.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-
-class MercadoPagoWebhookView(APIView):
+class StripeWebhookView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
-        payload = request.data
-        topic = request.query_params.get('topic') or payload.get('type') or payload.get('action')
-        
-        mp_order_id = payload.get('data', {}).get('id') or payload.get('id')
+        payload = request.body
+        sig_header = request.META.get('HTTP_STRIPE_SIGNATURE')
 
-        if topic in ['order', 'merchant_order'] or 'order' in str(topic):
-            if mp_order_id:
+        try:
+            event = stripe.Webhook.construct_event(
+                payload, sig_header, settings.STRIPE_WEBHOOK_SECRET
+            )
+        except ValueError:
+            return Response(status=status.HTTP_400_BAD_REQUEST)
+        except stripe.error.SignatureVerificationError:
+            return Response(status=status.HTTP_400_BAD_REQUEST)
+
+        if event['type'] == 'checkout.session.completed':
+            session = event['data']['object']
+            order_id = session.get('client_reference_id')
+
+            if order_id:
                 try:
-                    mp_order = MercadoPagoService.get_order(mp_order_id)
-                    external_ref = mp_order.get('external_reference')
-                    mp_status = mp_order.get('status', '').lower()
-
-                    if external_ref:
-                        order = Order.objects.get(id=external_ref)
-                        order.payment_status = mp_status
-
-                        if mp_status in ['processed', 'approved']:
-                            order.status = 'PAID'
-                        elif mp_status in ['cancelled', 'rejected', 'expired']:
-                            order.status = 'CANCELED'
-
-                        order.save()
-                        return Response({'status': 'updated'}, status=status.HTTP_200_OK)
+                    order = Order.objects.get(id=order_id)
+                    order.payment_status = 'paid'
+                    order.status = 'PAID'
+                    order.save()
                 except Order.DoesNotExist:
-                    logger.warning("Pedido com external_reference %s não encontrado.", external_ref)
-                except Exception as e:
-                    logger.exception("Erro ao processar webhook do Mercado Pago")
+                    pass
 
-        return Response({'status': 'ignored'}, status=status.HTTP_200_OK)
-
-
-# ==========================================
-# 3. VIEW DE INTEGRAÇÃO - MELHOR ENVIO (FRETE)
-# ==========================================
+        return Response({'status': 'success'}, status=status.HTTP_200_OK)
 
 class ShippingSimulationView(APIView):
     ORIGIN_CEP = "89200000" 
