@@ -13,9 +13,6 @@ DEBUG = env('DEBUG')
 
 ALLOWED_HOSTS = ['localhost', '127.0.0.1', env('RENDER_EXTERNAL_HOSTNAME', default='')]
 
-
-# Application definition
-
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -63,20 +60,12 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'setup.wsgi.application'
 
-
-# Database
-# https://docs.djangoproject.com/en/6.0/ref/settings/#databases
-
 DATABASES = {
     'default': dj_database_url.config(
         default='sqlite:///' + str(BASE_DIR / 'db.sqlite3'),
         conn_max_age=600
     )
 }
-
-
-# Password validation
-# https://docs.djangoproject.com/en/6.0/ref/settings/#auth-password-validators
 
 AUTH_PASSWORD_VALIDATORS = [
     {
@@ -93,10 +82,6 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-
-# Internationalization
-# https://docs.djangoproject.com/en/6.0/topics/i18n/
-
 LANGUAGE_CODE = 'en-us'
 
 TIME_ZONE = 'UTC'
@@ -105,23 +90,16 @@ USE_I18N = True
 
 USE_TZ = True
 
-
-# Static files (CSS, JavaScript, Images)
-# https://docs.djangoproject.com/en/6.0/howto/static-files/
-
 STATIC_URL = 'static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
-#MEDIA CLOUD
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 STORAGES = {
-    # Manda as fotos dos produtos direto para o Cloudinary
     "default": {
         "BACKEND": "cloudinary_storage.storage.MediaCloudinaryStorage",
     },
-    # Mantém o WhiteNoise cuidando do CSS/JS do painel Admin original
     "staticfiles": {
         "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
     },
@@ -135,7 +113,7 @@ CLOUDINARY_STORAGE = {
 
 REST_FRAMEWORK = {
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
-    'PAGE_SIZE': 12, #12 produtos por tela  
+    'PAGE_SIZE': 12,
     'DEFAULT_FILTER_BACKENDS': [
         'django_filters.rest_framework.DjangoFilterBackend',
         'rest_framework.filters.SearchFilter',
@@ -151,14 +129,10 @@ SIMPLE_JWT = {
     'AUTH_HEADER_TYPES': ('Bearer',),
 }
 
-
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://localhost:8080",
     "http://127.0.0.1:5173",
-    
-    #TODO:
-    # "https://www.dlsautopecas.com.br",
 ]
 
 MELHOR_ENVIO_TOKEN = env('MELHOR_ENVIO_TOKEN', default='')
@@ -166,6 +140,10 @@ MELHOR_ENVIO_URL = env('MELHOR_ENVIO_URL', default='https://sandbox.melhorenvio.
 
 GOOGLE_CLIENT_ID = env('GOOGLE_CLIENT_ID')
 
-
 MERCADOPAGO_ACCESS_TOKEN = os.getenv('MERCADOPAGO_ACCESS_TOKEN', '')
 MERCADOPAGO_PUBLIC_KEY = os.getenv('MERCADOPAGO_PUBLIC_KEY', '')
+
+ASAAS_API_KEY = env('ASAAS_API_KEY')
+ASAAS_WALLET_ID = env('ASAAS_WALLET_ID')
+ASAAS_BASE_URL = env('ASAAS_BASE_URL')
+FRONTEND_URL = env('FRONTEND_URL', default='http://localhost:5173')
