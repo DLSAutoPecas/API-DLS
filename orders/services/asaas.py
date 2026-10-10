@@ -23,12 +23,12 @@ def create_payment(order, customer_id):
     url = f"{settings.ASAAS_BASE_URL}/payments"
     due_date = (date.today() + timedelta(days=3)).strftime("%Y-%m-%d")
     
-    total = sum(item.unit_price * item.quantity for item in order.items.all()) + order.shipping_fee
+    total = sum(float(item.unit_price) * item.quantity for item in order.items.all()) + float(order.shipping_fee)
     
     payload = {
         "customer": customer_id,
         "billingType": "UNDEFINED",
-        "value": float(total),
+        "value": total,
         "dueDate": due_date,
         "description": f"Pedido {order.id}",
         "externalReference": str(order.id),
