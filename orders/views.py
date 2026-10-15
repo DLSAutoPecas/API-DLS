@@ -17,7 +17,8 @@ class OrderViewSet(viewsets.ModelViewSet):
             customer_id = create_customer(
                 name=order.customer_name,
                 email=order.customer_email,
-                phone=order.customer_phone
+                phone=order.customer_phone,
+                cpf=order.customer_cpf
             )
             invoice_url = create_payment(order, customer_id)
             
