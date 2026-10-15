@@ -35,11 +35,12 @@ def create_payment(order, customer_id):
         "value": total,
         "dueDate": due_date,
         "description": f"Pedido {order.id}",
-        "externalReference": str(order.id),
-        "callback": {
-            "successUrl": f"{settings.FRONTEND_URL}/customer-area",
-            "autoRedirect": True
-        }
+        "externalReference": str(order.id)
+        # Callback removido temporariamente pois o Asaas Produção não aceita localhost
+        # "callback": {
+        #     "successUrl": f"{settings.FRONTEND_URL}/customer-area",
+        #     "autoRedirect": True
+        # }
     }
     
     response = requests.post(url, json=payload, headers=get_headers())
