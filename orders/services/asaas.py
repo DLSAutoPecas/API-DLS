@@ -16,7 +16,11 @@ def create_customer(name, email, phone):
         "phone": phone
     }
     response = requests.post(url, json=payload, headers=get_headers())
-    response.raise_for_status()
+    
+    if not response.ok:
+        # Se falhar, lança uma exceção com o texto exato do Asaas
+        raise Exception(f"Erro ao criar cliente no Asaas: {response.text}")
+        
     return response.json()["id"]
 
 def create_payment(order, customer_id):
@@ -39,5 +43,9 @@ def create_payment(order, customer_id):
     }
     
     response = requests.post(url, json=payload, headers=get_headers())
-    response.raise_for_status()
+    
+    if not response.ok:
+        # Se falhar, lança uma exceção com o texto exato do Asaas
+        raise Exception(f"Erro ao criar cobrança no Asaas: {response.text}")
+        
     return response.json()["invoiceUrl"]
