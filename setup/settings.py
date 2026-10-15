@@ -133,6 +133,7 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://localhost:8080",
     "http://127.0.0.1:5173",
+    "https://front-dls.vercel.app/",
 ]
 
 MELHOR_ENVIO_TOKEN = env('MELHOR_ENVIO_TOKEN', default='')
@@ -147,4 +148,4 @@ MERCADOPAGO_PUBLIC_KEY = os.getenv('MERCADOPAGO_PUBLIC_KEY', '')
 ASAAS_API_KEY = os.getenv('ASAAS_API_KEY', '')
 ASAAS_WALLET_ID = os.getenv('ASAAS_WALLET_ID', '')
 ASAAS_BASE_URL = os.getenv('ASAAS_BASE_URL', '')
-FRONTEND_URL = env('FRONTEND_URL', default='http://localhost:5173')
+FRONTEND_URL = env('FRONTEND_URL', default='https://front-dls.vercel.app/')
