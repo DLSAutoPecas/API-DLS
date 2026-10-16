@@ -1,6 +1,7 @@
 import requests
 from django.conf import settings
 from datetime import date, timedelta
+from decimal import Decimal
 
 def get_headers():
     return {
@@ -27,14 +28,20 @@ def create_payment(order, customer_id):
     url = f"{settings.ASAAS_BASE_URL}/payments"
     due_date = (date.today() + timedelta(days=3)).strftime("%Y-%m-%d")
     
-    total_items = sum(float(item.unit_price) * float(item.quantity) for item in order.items.all())
-    shipping = float(order.shipping_fee)
-    valor_total = total_items + shipping
+    valor_total = Decimal('0.00')
+    
+    for item in order.items.all():
+        preco = Decimal(str(item.unit_price))
+        quantidade = Decimal(str(item.quantity))
+        valor_total += preco * quantidade
+        
+    taxa_entrega = Decimal(str(order.shipping_fee))
+    valor_total += taxa_entrega
     
     payload = {
         "customer": customer_id,
         "billingType": "UNDEFINED",
-        "value": valor_total,
+        "value": float(valor_total),
         "dueDate": due_date,
         "description": f"Pedido {order.id}",
         "externalReference": str(order.id),
