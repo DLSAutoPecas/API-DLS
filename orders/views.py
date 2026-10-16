@@ -1,3 +1,4 @@
+import traceback
 from rest_framework import viewsets, status
 from rest_framework.response import Response
 from .models import Order
@@ -28,7 +29,8 @@ class OrderViewSet(viewsets.ModelViewSet):
             )
         except Exception as e:
             order.delete()
+            error_details = traceback.format_exc()
             return Response(
-                {"error": str(e)},
+                {"error": f"{str(e)} \n\nDetalhes Tecnicos:\n{error_details}"},
                 status=status.HTTP_400_BAD_REQUEST
             )
