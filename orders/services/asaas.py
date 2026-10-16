@@ -40,7 +40,7 @@ def create_payment(order, customer_id):
         "description": f"Pedido {order.id}",
         "externalReference": str(order.id),
         "callback": {
-            "successUrl": f"{settings.FRONTEND_URL}/customer-area",
+            "successUrl": "https://front-dls.vercel.app/customer-area",
             "autoRedirect": True
         }
     }
