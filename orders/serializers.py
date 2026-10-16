@@ -2,16 +2,12 @@ from rest_framework import serializers
 from .models import Order, OrderItem
 from catalog.models import Product
 
-
 class OrderItemSerializer(serializers.ModelSerializer):
     product_id = serializers.UUIDField()
 
     class Meta:
         model = OrderItem
         fields = ["product_id", "quantity"]
-
-
-# orders/serializers.py
 
 class OrderSerializer(serializers.ModelSerializer):
     items = OrderItemSerializer(many=True, write_only=True)
@@ -26,15 +22,13 @@ class OrderSerializer(serializers.ModelSerializer):
             "shipping_service", "shipping_fee", "items", "status", "status_display",
             "created_at", "total",
         ]
-        # "address" fica read_only porque agora é gerado automaticamente, não vem mais do frontend
         read_only_fields = ["id", "status", "status_display", "created_at", "total", "address"]
 
     def get_total(self, obj):
-        total_items = sum(item.quantity * item.unit_price for item in obj.items.all())
-        return float(total_items + obj.shipping_fee)
+        total_items = sum((item.quantity * item.unit_price for item in obj.items.all()), 0)
+        return float(total_items) + float(obj.shipping_fee)
 
     def _build_address_string(self, validated_data):
-        # Monta a mesma string única de antes, pra manter tudo que já lê "address" funcionando
         parts = [
             f"{validated_data.get('street', '')}, {validated_data.get('number', '')}".strip(', '),
             validated_data.get('complement', ''),
@@ -56,14 +50,10 @@ class OrderSerializer(serializers.ModelSerializer):
                 quantity=item_data["quantity"], unit_price=product.price,
             )
         return order
-        
 
-
-# SImulacao de frete
 class ShippingItemSerializer(serializers.Serializer):
     product_id = serializers.UUIDField()
     quantity = serializers.IntegerField(min_value=1)
-
 
 class ShippingSimulationSerializer(serializers.Serializer):
     zip_code = serializers.CharField(max_length=9)
