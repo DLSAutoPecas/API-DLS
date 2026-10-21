@@ -6,5 +6,6 @@ router = DefaultRouter()
 router.register(r'', views.OrderViewSet, basename='order')
 
 urlpatterns = [
+    path('shipping/simulate/', views.ShippingQuoteView.as_view(), name='shipping_simulate'),
     path('', include(router.urls)),
 ]

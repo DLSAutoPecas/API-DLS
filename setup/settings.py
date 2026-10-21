@@ -136,9 +136,6 @@ CORS_ALLOWED_ORIGINS = [
     "https://front-dls.vercel.app",
 ]
 
-MELHOR_ENVIO_TOKEN = env('MELHOR_ENVIO_TOKEN', default='')
-MELHOR_ENVIO_URL = env('MELHOR_ENVIO_URL', default='https://sandbox.melhorenvio.com.br')
-
 GOOGLE_CLIENT_ID = env('GOOGLE_CLIENT_ID')
 
 MERCADOPAGO_ACCESS_TOKEN = os.getenv('MERCADOPAGO_ACCESS_TOKEN', '')
@@ -148,3 +145,12 @@ ASAAS_API_KEY = os.getenv('ASAAS_API_KEY', '')
 ASAAS_WALLET_ID = os.getenv('ASAAS_WALLET_ID', '')
 ASAAS_BASE_URL = os.getenv('ASAAS_BASE_URL', '')
 FRONTEND_URL = os.getenv('FRONTEND_URL', 'https://front-dls.vercel.app')
+
+# --- SuperFrete ---
+SUPERFRETE_TOKEN = os.getenv('SUPERFRETE_TOKEN', '')
+SUPERFRETE_BASE_URL = os.getenv('SUPERFRETE_BASE_URL', 'https://sandbox.superfrete.com')
+SUPERFRETE_USER_AGENT = os.getenv('SUPERFRETE_USER_AGENT', 'DLS AutoPecas 1.0 (contato@dlsautopecas.com.br)')
+SUPERFRETE_SERVICES = os.getenv('SUPERFRETE_SERVICES', '1,2,17')
+SUPERFRETE_USE_INSURANCE = os.getenv('SUPERFRETE_USE_INSURANCE', 'True') == 'True'
+SHIPPING_ORIGIN_POSTAL_CODE = os.getenv('SHIPPING_ORIGIN_POSTAL_CODE', '89210001')
+LOJA_WHATSAPP = os.getenv('LOJA_WHATSAPP', '')
