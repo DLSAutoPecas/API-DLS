@@ -1,4 +1,6 @@
 from rest_framework import viewsets, filters, generics, permissions, status
+from rest_framework_simplejwt.views import TokenObtainPairView
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -308,3 +310,18 @@ class CustomerDetailView(APIView):
                 return Response({"erro": "Usuário não encontrado"}, status=404)
         else:
             return Response({"erro": "Não é possível excluir clientes convidados que possuem vínculos a pedidos."}, status=400)
+
+class EmailOrUsernameTokenSerializer(TokenObtainPairSerializer):
+    """Permite login com e-mail além do username."""
+
+    def validate(self, attrs):
+        login = attrs.get('username', '')
+        if '@' in login:
+            user = User.objects.filter(email__iexact=login).first()
+            if user:
+                attrs['username'] = user.username
+        return super().validate(attrs)
+
+
+class EmailOrUsernameTokenView(TokenObtainPairView):
+    serializer_class = EmailOrUsernameTokenSerializer
