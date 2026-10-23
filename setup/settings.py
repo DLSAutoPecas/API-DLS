@@ -137,6 +137,11 @@ CORS_ALLOWED_ORIGINS = [
 ]
 
 GOOGLE_CLIENT_ID = env('GOOGLE_CLIENT_ID')
+GOOGLE_ADMIN_EMAILS = [
+    e.strip().lower()
+    for e in os.getenv('GOOGLE_ADMIN_EMAILS', '').split(',')
+    if e.strip()
+]
 
 MERCADOPAGO_ACCESS_TOKEN = os.getenv('MERCADOPAGO_ACCESS_TOKEN', '')
 MERCADOPAGO_PUBLIC_KEY = os.getenv('MERCADOPAGO_PUBLIC_KEY', '')

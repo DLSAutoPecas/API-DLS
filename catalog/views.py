@@ -60,19 +60,25 @@ class GoogleLoginView(APIView):
                 status=status.HTTP_401_UNAUTHORIZED
             )
 
-        email = idinfo['email']
 
-        user, created = User.objects.get_or_create(
-            email=email,
-            defaults={
-                'username': email,
-                'first_name': idinfo.get('given_name', ''),
-                'last_name': idinfo.get('family_name', ''),
-            }
-        )
-        if created:
+        email = idinfo['email'].lower()
+
+        user = User.objects.filter(email__iexact=email).first()
+        if user is None:
+            user = User.objects.create_user(
+                username=email,
+                email=email,
+                first_name=idinfo.get('given_name', ''),
+                last_name=idinfo.get('family_name', ''),
+            )
             user.set_unusable_password()
             user.save()
+
+        # Permissao administrativa somente para e-mails autorizados.
+        # Nunca remove permissao de quem ja e admin por outro caminho.
+        if email in settings.GOOGLE_ADMIN_EMAILS and not user.is_staff:
+            user.is_staff = True
+            user.save(update_fields=['is_staff'])
 
         refresh = RefreshToken.for_user(user)
         return Response({
