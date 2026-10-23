@@ -28,7 +28,11 @@ class OrderViewSet(viewsets.ModelViewSet):
                 cpf=order.customer_cpf
             )
             invoice_url = create_payment(order, customer_id)
-
+            
+            # --- NOVO: GUARDAR O LINK NA BASE DE DADOS ---
+            order.invoice_url = invoice_url
+            order.save()
+            
             return Response(
                 {"order": serializer.data, "invoice_url": invoice_url},
                 status=status.HTTP_201_CREATED
