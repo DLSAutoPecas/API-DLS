@@ -1,7 +1,8 @@
-import traceback
+import logging
 
 from rest_framework import viewsets, status, permissions
 from rest_framework.views import APIView
+from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from catalog.models import Product
@@ -10,12 +11,38 @@ from .serializers import OrderSerializer, ShippingSimulationSerializer
 from .services.asaas import create_customer, create_payment
 from .services import superfrete
 
+logger = logging.getLogger(__name__)
+
+
+import logging
+
+from rest_framework import viewsets, status, permissions
+from rest_framework.views import APIView
+from rest_framework.decorators import action
+from rest_framework.response import Response
+
+from catalog.models import Product
+from .models import Order
+from .serializers import OrderSerializer, ShippingSimulationSerializer
+from .services.asaas import create_customer, create_payment
+from .services import superfrete
+
+logger = logging.getLogger(__name__)
+
 
 class OrderViewSet(viewsets.ModelViewSet):
     queryset = Order.objects.all()
     serializer_class = OrderSerializer
 
-    def create(self, request, *args, **kwargs):
+    def get_permissions(self):
+        # Checkout é público (cliente não logado). O restante (listar,
+        # ver, editar, excluir pedidos) é só para administrador.
+        if self.action == 'checkout':
+            return [permissions.AllowAny()]
+        return [permissions.IsAdminUser()]
+
+    @action(detail=False, methods=['post'])
+    def checkout(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         order = serializer.save()
@@ -25,20 +52,19 @@ class OrderViewSet(viewsets.ModelViewSet):
                 name=order.customer_name,
                 email=order.customer_email,
                 phone=order.customer_phone,
-                cpf=order.customer_cpf
+                cpf=order.customer_cpf,
             )
             invoice_url = create_payment(order, customer_id)
-
             return Response(
                 {"order": serializer.data, "invoice_url": invoice_url},
-                status=status.HTTP_201_CREATED
+                status=status.HTTP_201_CREATED,
             )
-        except Exception as e:
+        except Exception:
             order.delete()
-            error_details = traceback.format_exc()
+            logger.exception("Falha no checkout do pedido")
             return Response(
-                {"error": f"{str(e)} \n\nDetalhes Tecnicos:\n{error_details}"},
-                status=status.HTTP_400_BAD_REQUEST
+                {"error": "Não foi possível processar o pagamento. Tente novamente."},
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
 
