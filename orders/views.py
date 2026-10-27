@@ -14,22 +14,6 @@ from .services import superfrete
 logger = logging.getLogger(__name__)
 
 
-import logging
-
-from rest_framework import viewsets, status, permissions
-from rest_framework.views import APIView
-from rest_framework.decorators import action
-from rest_framework.response import Response
-
-from catalog.models import Product
-from .models import Order
-from .serializers import OrderSerializer, ShippingSimulationSerializer
-from .services.asaas import create_customer, create_payment
-from .services import superfrete
-
-logger = logging.getLogger(__name__)
-
-
 class OrderViewSet(viewsets.ModelViewSet):
     queryset = Order.objects.all()
     serializer_class = OrderSerializer
@@ -55,6 +39,11 @@ class OrderViewSet(viewsets.ModelViewSet):
                 cpf=order.customer_cpf,
             )
             invoice_url = create_payment(order, customer_id)
+            
+            # --- NOVO: GUARDAR O LINK NA BASE DE DADOS ---
+            order.invoice_url = invoice_url
+            order.save()
+            
             return Response(
                 {"order": serializer.data, "invoice_url": invoice_url},
                 status=status.HTTP_201_CREATED,

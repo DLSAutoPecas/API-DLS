@@ -16,31 +16,31 @@ class Order(models.Model):
     customer_name = models.CharField(max_length=255)
     customer_email = models.EmailField()
     customer_cpf = models.CharField(max_length=14)
-    customer_phone = models.CharField(max_length=20, blank=True, default='')  # NOVO — o boleto exige
+    customer_phone = models.CharField(max_length=20, blank=True, default='')
 
     zip_code = models.CharField(max_length=9)
-    address = models.CharField(max_length=255, blank=True, default='')  # mantido, só pra não quebrar telas que já usam
-    street = models.CharField(max_length=255, blank=True, default='')       # NOVO
-    number = models.CharField(max_length=20, blank=True, default='')        # NOVO
-    district = models.CharField(max_length=100, blank=True, default='')     # NOVO
-    complement = models.CharField(max_length=100, blank=True, default='')   # NOVO
-    city = models.CharField(max_length=100, blank=True, default='')         # NOVO
-    state = models.CharField(max_length=2, blank=True, default='')          # NOVO
+    address = models.CharField(max_length=255, blank=True, default='')
+    street = models.CharField(max_length=255, blank=True, default='')
+    number = models.CharField(max_length=20, blank=True, default='')
+    district = models.CharField(max_length=100, blank=True, default='')
+    complement = models.CharField(max_length=100, blank=True, default='')
+    city = models.CharField(max_length=100, blank=True, default='')
+    state = models.CharField(max_length=2, blank=True, default='')
 
     shipping_service = models.CharField(max_length=50)
     shipping_fee = models.DecimalField(max_digits=8, decimal_places=2, default=0.00)
-    shipping_service_id = models.IntegerField(null=True, blank=True)       # 1=PAC, 2=SEDEX, 17=Mini
-    shipping_deadline_days = models.IntegerField(null=True, blank=True)
 
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
     tracking_code = models.CharField(max_length=100, blank=True, null=True)
+    
+    # --- NOVO CAMPO PARA O ASAAS ---
+    invoice_url = models.URLField(max_length=500, blank=True, null=True)
 
     # --- NOVOS CAMPOS PARA MERCADO PAGO ---
     mercadopago_order_id = models.CharField(max_length=100, blank=True, null=True, db_index=True)
-    payment_method = models.CharField(max_length=20, blank=True, default='')  # 'pix' ou 'card'
-    payment_status = models.CharField(max_length=50, blank=True, default='')   # status retornado do MP (e.g. approved, pending)
-    pix_expiration_date = models.DateTimeField(blank=True, null=True)         # Data/hora de expiração do Pix
-    # --------------------------------------
+    payment_method = models.CharField(max_length=20, blank=True, default='')
+    payment_status = models.CharField(max_length=50, blank=True, default='')
+    pix_expiration_date = models.DateTimeField(blank=True, null=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
