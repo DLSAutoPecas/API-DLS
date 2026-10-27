@@ -1,7 +1,7 @@
 import uuid
 from django.db import models
 from catalog.models import Product
-
+#comando para desbugar bug
 class Order(models.Model):
     STATUS_CHOICES = (
         ('PENDING', 'Aguardando Pagamento'),
