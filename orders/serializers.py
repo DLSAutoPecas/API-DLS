@@ -27,10 +27,10 @@ class OrderSerializer(serializers.ModelSerializer):
             "id", "customer_name", "customer_email", "customer_cpf", "customer_phone",
             "zip_code", "address", "street", "number", "district", "complement", "city", "state",
             "shipping_service", "shipping_service_id", "shipping_fee", "shipping_deadline_days",
-            "items", "status", "status_display", "created_at", "total",
+            "items", "status", "status_display", "created_at", "total", "invoice_url",
         ]
         read_only_fields = [
-            "id", "status", "status_display", "created_at", "total", "address",
+            "id", "status", "status_display", "created_at", "total", "address", "invoice_url",
             "shipping_fee", "shipping_service", "shipping_deadline_days",
         ]
 
