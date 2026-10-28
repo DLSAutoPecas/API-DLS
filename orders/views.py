@@ -2,7 +2,6 @@ import logging
 
 from rest_framework import viewsets, status, permissions
 from rest_framework.views import APIView
-from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from catalog.models import Product
@@ -15,18 +14,17 @@ logger = logging.getLogger(__name__)
 
 
 class OrderViewSet(viewsets.ModelViewSet):
-    queryset = Order.objects.all()
+    queryset = Order.objects.all().order_by('-created_at')
     serializer_class = OrderSerializer
 
     def get_permissions(self):
-        # Checkout é público (cliente não logado). O restante (listar,
-        # ver, editar, excluir pedidos) é só para administrador.
-        if self.action == 'checkout':
+        # O checkout (criar pedido) é público: o cliente compra sem login.
+        # Listar, ver, editar e excluir pedidos é só para administrador.
+        if self.action == 'create':
             return [permissions.AllowAny()]
         return [permissions.IsAdminUser()]
 
-    @action(detail=False, methods=['post'])
-    def checkout(self, request, *args, **kwargs):
+    def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         order = serializer.save()
@@ -39,11 +37,6 @@ class OrderViewSet(viewsets.ModelViewSet):
                 cpf=order.customer_cpf,
             )
             invoice_url = create_payment(order, customer_id)
-            
-            # --- NOVO: GUARDAR O LINK NA BASE DE DADOS ---
-            order.invoice_url = invoice_url
-            order.save()
-            
             return Response(
                 {"order": serializer.data, "invoice_url": invoice_url},
                 status=status.HTTP_201_CREATED,
