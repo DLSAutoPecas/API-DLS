@@ -149,6 +149,7 @@ MERCADOPAGO_PUBLIC_KEY = os.getenv('MERCADOPAGO_PUBLIC_KEY', '')
 ASAAS_API_KEY = os.getenv('ASAAS_API_KEY', '')
 ASAAS_WALLET_ID = os.getenv('ASAAS_WALLET_ID', '')
 ASAAS_BASE_URL = os.getenv('ASAAS_BASE_URL', '')
+ASAAS_WEBHOOK_TOKEN = os.getenv('ASAAS_WEBHOOK_TOKEN', '')
 FRONTEND_URL = os.getenv('FRONTEND_URL', 'https://front-dls.vercel.app')
 
 # --- SuperFrete ---
