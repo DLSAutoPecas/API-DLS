@@ -160,7 +160,7 @@ class ProductViewSet(viewsets.ModelViewSet):
             )
 
 class DashboardResumoView(APIView):
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [permissions.IsAdminUser]
 
     def get(self, request):
         periodo = request.query_params.get('periodo', 'mes')
@@ -203,7 +203,7 @@ class DashboardResumoView(APIView):
         })
 
 class CustomerListView(APIView):
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [permissions.IsAdminUser]
 
     def get(self, request):
         clientes_dict = {}
@@ -276,7 +276,7 @@ class CustomerListView(APIView):
 
 
 class CustomerDetailView(APIView):
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [permissions.IsAdminUser]
 
     def put(self, request, pk):
         nome = request.data.get('nome', '')
