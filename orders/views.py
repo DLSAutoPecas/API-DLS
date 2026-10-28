@@ -1,8 +1,15 @@
 import logging
 
+import secrets
+from django.conf import settings
+from django.db import transaction
+from django.db.models import F
+from django.core.exceptions import ValidationError
+
 from rest_framework import viewsets, status, permissions
 from rest_framework.views import APIView
 from rest_framework.response import Response
+
 
 from catalog.models import Product
 from .models import Order
@@ -85,3 +92,60 @@ class ShippingQuoteView(APIView):
             )
 
         return Response(options)
+PAID_EVENTS = {'PAYMENT_RECEIVED', 'PAYMENT_CONFIRMED'}
+
+
+class AsaasWebhookView(APIView):
+    """Recebe notificações do Asaas. Sempre responde 200 quando o token
+    é válido, para o Asaas não reenviar indefinidamente."""
+    permission_classes = [permissions.AllowAny]
+    authentication_classes = []
+
+    def post(self, request):
+        expected = settings.ASAAS_WEBHOOK_TOKEN
+        received = request.headers.get('asaas-access-token', '')
+        if not expected or not secrets.compare_digest(received, expected):
+            logger.warning('Webhook Asaas recusado: token invalido.')
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
+
+        event = request.data.get('event')
+        payment = request.data.get('payment') or {}
+
+        if event not in PAID_EVENTS:
+            return Response({'received': True})
+
+        order_id = payment.get('externalReference')
+        if not order_id:
+            logger.error(
+                'Webhook %s sem externalReference. Campos recebidos: %s',
+                event, list(payment.keys()),
+            )
+            return Response({'received': True})
+
+        try:
+            with transaction.atomic():
+                order = Order.objects.select_for_update().filter(id=order_id).first()
+
+                if order is None:
+                    logger.error('Webhook %s: pedido %s nao encontrado.', event, order_id)
+                    return Response({'received': True})
+
+                # Idempotencia: so processa a primeira vez.
+                if order.status != 'PENDING':
+                    return Response({'received': True})
+
+                for item in order.items.all():
+                    Product.objects.filter(id=item.product_id).update(
+                        stock=F('stock') - item.quantity
+                    )
+
+                order.status = 'PAID'
+                order.payment_status = payment.get('status') or event
+                order.payment_method = payment.get('billingType') or ''
+                order.save(update_fields=['status', 'payment_status', 'payment_method'])
+
+            logger.info('Pedido %s marcado como PAGO via %s.', order_id, event)
+        except (ValueError, ValidationError):
+            logger.exception('Webhook %s com externalReference invalido: %s', event, order_id)
+
+        return Response({'received': True})

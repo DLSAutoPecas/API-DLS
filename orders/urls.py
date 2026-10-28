@@ -7,5 +7,6 @@ router.register(r'', views.OrderViewSet, basename='order')
 
 urlpatterns = [
     path('shipping/simulate/', views.ShippingQuoteView.as_view(), name='shipping_simulate'),
+    path('webhook/asaas/', views.AsaasWebhookView.as_view(), name='asaas_webhook'),
     path('', include(router.urls)),
 ]
