@@ -1,5 +1,5 @@
 from decimal import Decimal
-
+from django.db import transaction
 from rest_framework import serializers
 
 from .models import Order, OrderItem
@@ -63,6 +63,23 @@ class OrderSerializer(serializers.ModelSerializer):
                 {"items": "Um ou mais produtos não foram encontrados."}
             )
 
+        # Valida estoque antes de cotar frete e antes de gerar cobranca.
+        sem_estoque = []
+        for pid, qty in quantities.items():
+            product = products[pid]
+            disponivel = max(product.stock, 0)
+            if disponivel < qty:
+                if disponivel == 0:
+                    sem_estoque.append(f"{product.name} (esgotado)")
+                else:
+                    sem_estoque.append(
+                        f"{product.name} (pedido: {qty}, disponivel: {disponivel})"
+                    )
+        if sem_estoque:
+            raise serializers.ValidationError({
+                "items": "Estoque insuficiente para: " + "; ".join(sem_estoque)
+            })
+
         cart_lines = [(p, quantities[p.id]) for p in products.values()]
 
         # Recota no servidor. O valor enviado pelo frontend é ignorado.
@@ -84,15 +101,15 @@ class OrderSerializer(serializers.ModelSerializer):
         validated_data["shipping_deadline_days"] = chosen["deadline_days"]
         validated_data["address"] = self._build_address_string(validated_data)
 
-        order = Order.objects.create(**validated_data)
-        for pid, qty in quantities.items():
-            product = products[pid]
-            OrderItem.objects.create(
-                order=order, product=product,
-                quantity=qty, unit_price=product.price,
-            )
+        with transaction.atomic():
+            order = Order.objects.create(**validated_data)
+            for pid, qty in quantities.items():
+                product = products[pid]
+                OrderItem.objects.create(
+                    order=order, product=product,
+                    quantity=qty, unit_price=product.price,
+                )
         return order
-
 
 class ShippingItemSerializer(serializers.Serializer):
     product_id = serializers.UUIDField()
