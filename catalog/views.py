@@ -311,14 +311,32 @@ class CustomerDetailView(APIView):
 
     def delete(self, request, pk):
         if str(pk).isdigit():
-            try:
-                user = User.objects.get(id=pk)
-                user.delete()
-                return Response({"mensagem": "Cliente excluído com sucesso"})
-            except User.DoesNotExist:
+            user = User.objects.filter(id=pk).first()
+            if user is None:
                 return Response({"erro": "Usuário não encontrado"}, status=404)
-        else:
-            return Response({"erro": "Não é possível excluir clientes convidados que possuem vínculos a pedidos."}, status=400)
+            if user.is_superuser:
+                return Response({"erro": "Não é possível excluir um administrador."}, status=403)
+            user.delete()
+            return Response({"mensagem": "Cliente excluído com sucesso"})
+
+        order = Order.objects.filter(id=pk).first()
+        if order is None:
+            return Response({"erro": "Convidado não encontrado"}, status=404)
+
+        email = order.customer_email
+        pedidos = Order.objects.filter(customer_email=email)
+        pagos = pedidos.exclude(status='PENDING').count()
+
+        if pagos:
+            return Response(
+                {"erro": f"Este cliente possui {pagos} pedido(s) com pagamento. "
+                         "O histórico não pode ser apagado."},
+                status=409,
+            )
+
+        total = pedidos.count()
+        pedidos.delete()
+        return Response({"mensagem": f"Convidado removido junto com {total} pedido(s) pendente(s)."})
 
 class EmailOrUsernameTokenSerializer(TokenObtainPairSerializer):
     """Permite login com e-mail além do username."""
