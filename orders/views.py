@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 class OrderViewSet(viewsets.ModelViewSet):
-    queryset = Order.objects.all().order_by('-created_at')
+    queryset = Order.objects.prefetch_related('items__product').order_by('-created_at')
     serializer_class = OrderSerializer
 
     def get_permissions(self):

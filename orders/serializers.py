@@ -15,6 +15,24 @@ class OrderItemSerializer(serializers.ModelSerializer):
         fields = ["product_id", "quantity"]
 
 
+class OrderItemReadSerializer(serializers.ModelSerializer):
+    product_id = serializers.UUIDField(source="product.id", read_only=True)
+    product_name = serializers.CharField(source="product.name", read_only=True)
+    product_sku = serializers.CharField(source="product.sku", read_only=True)
+    unit_price = serializers.FloatField(read_only=True)
+    subtotal = serializers.SerializerMethodField()
+
+    class Meta:
+        model = OrderItem
+        fields = [
+            "product_id", "product_name", "product_sku",
+            "quantity", "unit_price", "subtotal",
+        ]
+
+    def get_subtotal(self, obj):
+        return float(obj.quantity * obj.unit_price)
+
+
 class OrderSerializer(serializers.ModelSerializer):
     items = OrderItemSerializer(many=True, write_only=True)
     total = serializers.SerializerMethodField()
@@ -37,6 +55,13 @@ class OrderSerializer(serializers.ModelSerializer):
     def get_total(self, obj):
         total_items = sum((item.quantity * item.unit_price for item in obj.items.all()), 0)
         return float(total_items) + float(obj.shipping_fee)
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        data["items"] = OrderItemReadSerializer(instance.items.all(), many=True).data
+        data["shipping_fee"] = float(instance.shipping_fee)
+        return data
+    
 
     def _build_address_string(self, validated_data):
         parts = [
