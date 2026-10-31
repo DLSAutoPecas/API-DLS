@@ -1,4 +1,5 @@
 from rest_framework import viewsets, filters, generics, permissions, status
+from django.db.models import ProtectedError
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework.views import APIView
@@ -118,6 +119,17 @@ class ProductImageViewSet(viewsets.ModelViewSet):
         else:
             permission_classes = [permissions.IsAdminUser]
         return [permission() for permission in permission_classes]
+    def destroy(self, request, *args, **kwargs):
+        image = self.get_object()
+        era_principal = image.is_main
+        produto = image.product
+        image.delete()
+        if era_principal:
+            proxima = produto.images.first()
+            if proxima:
+                proxima.is_main = True
+                proxima.save(update_fields=['is_main'])
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 class ProductViewSet(viewsets.ModelViewSet):
     queryset = Product.objects.all().order_by('-created_at')
@@ -138,7 +150,18 @@ class ProductViewSet(viewsets.ModelViewSet):
             permission_classes = [permissions.IsAdminUser]
         return [permission() for permission in permission_classes]
 
-
+    def destroy(self, request, *args, **kwargs):
+        product = self.get_object()
+        try:
+            product.delete()
+        except ProtectedError:
+            return Response(
+                {'detail': 'Este produto já faz parte de pedidos e não pode ser '
+                           'excluído. Para tirá-lo da loja, defina o estoque como 0.'},
+                status=status.HTTP_409_CONFLICT,
+            )
+        return Response(status=status.HTTP_204_NO_CONTENT)
+    
 class DashboardResumoView(APIView):
     permission_classes = [permissions.IsAdminUser]
 
