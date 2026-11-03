@@ -151,7 +151,7 @@ ASAAS_API_KEY = os.getenv('ASAAS_API_KEY', '')
 ASAAS_WALLET_ID = os.getenv('ASAAS_WALLET_ID', '')
 ASAAS_BASE_URL = os.getenv('ASAAS_BASE_URL', '')
 ASAAS_WEBHOOK_TOKEN = os.getenv('ASAAS_WEBHOOK_TOKEN', '')
-FRONTEND_URL = os.getenv('FRONTEND_URL', 'https://front-dls.vercel.app', 'https://www.dlsautopecas.com.br')
+FRONTEND_URL = os.getenv('FRONTEND_URL', 'https://www.dlsautopecas.com.br')
 
 # --- SuperFrete ---
 SUPERFRETE_TOKEN = os.getenv('SUPERFRETE_TOKEN', '')
