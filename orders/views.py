@@ -3,7 +3,6 @@ import logging
 import secrets
 from django.conf import settings
 from django.db import transaction
-from django.db.models import F
 from django.core.exceptions import ValidationError
 
 from rest_framework import viewsets, status, permissions
@@ -134,10 +133,38 @@ class AsaasWebhookView(APIView):
                 if order.status != 'PENDING':
                     return Response({'received': True})
 
-                for item in order.items.all():
-                    Product.objects.filter(id=item.product_id).update(
-                        stock=F('stock') - item.quantity
-                    )
+                items = list(order.items.all())
+                product_ids = [item.product_id for item in items]
+
+                # Trava as linhas dos produtos durante a transacao. Isso evita
+                # que dois pedidos do mesmo produto (ex.: o ultimo item em
+                # estoque) sejam processados ao mesmo tempo por dois webhooks
+                # concorrentes.
+                products = {
+                    p.id: p
+                    for p in Product.objects.select_for_update().filter(id__in=product_ids)
+                }
+
+                for item in items:
+                    product = products.get(item.product_id)
+                    if product is None:
+                        logger.error(
+                            'Pedido %s: produto %s nao encontrado ao dar baixa no estoque.',
+                            order_id, item.product_id,
+                        )
+                        continue
+
+                    novo_estoque = product.stock - item.quantity
+                    if novo_estoque < 0:
+                        logger.warning(
+                            'Pedido %s: baixa de %s un. do produto %s levaria o '
+                            'estoque a %s. Estoque zerado; verificar divergencia '
+                            'manualmente.',
+                            order_id, item.quantity, product.id, novo_estoque,
+                        )
+                        novo_estoque = 0
+
+                    Product.objects.filter(id=product.id).update(stock=novo_estoque)
 
                 order.status = 'PAID'
                 order.payment_status = payment.get('status') or event
