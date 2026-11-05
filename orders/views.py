@@ -13,7 +13,7 @@ from rest_framework.response import Response
 from catalog.models import Product
 from .models import Order
 from .serializers import OrderSerializer, ShippingSimulationSerializer
-from .services.asaas import create_customer, create_payment
+from .services.asaas import create_checkout
 from .services import superfrete
 
 logger = logging.getLogger(__name__)
@@ -36,15 +36,11 @@ class OrderViewSet(viewsets.ModelViewSet):
         order = serializer.save()
 
         try:
-            customer_id = create_customer(
-                name=order.customer_name,
-                email=order.customer_email,
-                phone=order.customer_phone,
-                cpf=order.customer_cpf,
-            )
-            invoice_url = create_payment(order, customer_id)
+            checkout_link = create_checkout(order)
+            order.invoice_url = checkout_link
+            order.save(update_fields=['invoice_url'])
             return Response(
-                {"order": serializer.data, "invoice_url": invoice_url},
+                {"order": serializer.data, "invoice_url": checkout_link},
                 status=status.HTTP_201_CREATED,
             )
         except Exception:
@@ -91,12 +87,65 @@ class ShippingQuoteView(APIView):
             )
 
         return Response(options)
+
+
 PAID_EVENTS = {'PAYMENT_RECEIVED', 'PAYMENT_CONFIRMED'}
+CHECKOUT_PAID_EVENT = 'CHECKOUT_PAID'
+
+
+def _mark_order_paid(order_id, payment_status, payment_method, event_label):
+    """Idempotente: só processa a primeira vez que o pedido é pago.
+    Dá baixa no estoque de forma segura (sem deixar negativo)."""
+    with transaction.atomic():
+        order = Order.objects.select_for_update().filter(id=order_id).first()
+
+        if order is None:
+            logger.error('Webhook %s: pedido %s nao encontrado.', event_label, order_id)
+            return
+
+        if order.status != 'PENDING':
+            return
+
+        items = list(order.items.all())
+        product_ids = [item.product_id for item in items]
+        products = {
+            p.id: p
+            for p in Product.objects.select_for_update().filter(id__in=product_ids)
+        }
+
+        for item in items:
+            product = products.get(item.product_id)
+            if product is None:
+                logger.error(
+                    'Pedido %s: produto %s nao encontrado ao dar baixa no estoque.',
+                    order_id, item.product_id,
+                )
+                continue
+
+            novo_estoque = product.stock - item.quantity
+            if novo_estoque < 0:
+                logger.warning(
+                    'Pedido %s: baixa de %s un. do produto %s levaria o '
+                    'estoque a %s. Estoque zerado; verificar divergencia '
+                    'manualmente.',
+                    order_id, item.quantity, product.id, novo_estoque,
+                )
+                novo_estoque = 0
+
+            Product.objects.filter(id=product.id).update(stock=novo_estoque)
+
+        order.status = 'PAID'
+        order.payment_status = payment_status
+        order.payment_method = payment_method
+        order.save(update_fields=['status', 'payment_status', 'payment_method'])
+
+    logger.info('Pedido %s marcado como PAGO via %s.', order_id, event_label)
 
 
 class AsaasWebhookView(APIView):
-    """Recebe notificações do Asaas. Sempre responde 200 quando o token
-    é válido, para o Asaas não reenviar indefinidamente."""
+    """Recebe notificações do Asaas (cobranças avulsas antigas e Checkout).
+    Sempre responde 200 quando o token é válido, para o Asaas não reenviar
+    indefinidamente."""
     permission_classes = [permissions.AllowAny]
     authentication_classes = []
 
@@ -108,6 +157,33 @@ class AsaasWebhookView(APIView):
             return Response(status=status.HTTP_401_UNAUTHORIZED)
 
         event = request.data.get('event')
+
+        # --- Fluxo novo: Checkout (Pix / cartao a vista ou parcelado) ---
+        if event == CHECKOUT_PAID_EVENT:
+            checkout = request.data.get('checkout') or {}
+            order_id = checkout.get('externalReference')
+            if not order_id:
+                logger.error(
+                    'Webhook CHECKOUT_PAID sem externalReference. Campos recebidos: %s',
+                    list(checkout.keys()),
+                )
+                return Response({'received': True})
+
+            billing_types = checkout.get('billingTypes') or []
+            try:
+                _mark_order_paid(
+                    order_id,
+                    payment_status='CHECKOUT_PAID',
+                    payment_method=','.join(billing_types),
+                    event_label=event,
+                )
+            except (ValueError, ValidationError):
+                logger.exception(
+                    'Webhook CHECKOUT_PAID com externalReference invalido: %s', order_id
+                )
+            return Response({'received': True})
+
+        # --- Fluxo antigo: cobranca avulsa (fatura simples) ---
         payment = request.data.get('payment') or {}
 
         if event not in PAID_EVENTS:
@@ -122,56 +198,12 @@ class AsaasWebhookView(APIView):
             return Response({'received': True})
 
         try:
-            with transaction.atomic():
-                order = Order.objects.select_for_update().filter(id=order_id).first()
-
-                if order is None:
-                    logger.error('Webhook %s: pedido %s nao encontrado.', event, order_id)
-                    return Response({'received': True})
-
-                # Idempotencia: so processa a primeira vez.
-                if order.status != 'PENDING':
-                    return Response({'received': True})
-
-                items = list(order.items.all())
-                product_ids = [item.product_id for item in items]
-
-                # Trava as linhas dos produtos durante a transacao. Isso evita
-                # que dois pedidos do mesmo produto (ex.: o ultimo item em
-                # estoque) sejam processados ao mesmo tempo por dois webhooks
-                # concorrentes.
-                products = {
-                    p.id: p
-                    for p in Product.objects.select_for_update().filter(id__in=product_ids)
-                }
-
-                for item in items:
-                    product = products.get(item.product_id)
-                    if product is None:
-                        logger.error(
-                            'Pedido %s: produto %s nao encontrado ao dar baixa no estoque.',
-                            order_id, item.product_id,
-                        )
-                        continue
-
-                    novo_estoque = product.stock - item.quantity
-                    if novo_estoque < 0:
-                        logger.warning(
-                            'Pedido %s: baixa de %s un. do produto %s levaria o '
-                            'estoque a %s. Estoque zerado; verificar divergencia '
-                            'manualmente.',
-                            order_id, item.quantity, product.id, novo_estoque,
-                        )
-                        novo_estoque = 0
-
-                    Product.objects.filter(id=product.id).update(stock=novo_estoque)
-
-                order.status = 'PAID'
-                order.payment_status = payment.get('status') or event
-                order.payment_method = payment.get('billingType') or ''
-                order.save(update_fields=['status', 'payment_status', 'payment_method'])
-
-            logger.info('Pedido %s marcado como PAGO via %s.', order_id, event)
+            _mark_order_paid(
+                order_id,
+                payment_status=payment.get('status') or event,
+                payment_method=payment.get('billingType') or '',
+                event_label=event,
+            )
         except (ValueError, ValidationError):
             logger.exception('Webhook %s com externalReference invalido: %s', event, order_id)
 
