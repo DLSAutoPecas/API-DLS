@@ -56,7 +56,7 @@ def create_payment(order, customer_id):
         "description": f"Pedido {order.id}",
         "externalReference": str(order.id),
         "callback": {
-            "successUrl": "https://front-dls.vercel.app/customer-area",
+            "successUrl": "https://www.dlsautopecas.com.br/catalogo",
             "autoRedirect": True
         }
     }
@@ -103,9 +103,9 @@ def create_checkout(order):
         "installment": {"maxInstallmentCount": 12},
         "externalReference": str(order.id),
         "callback": {
-            "successUrl": f"{settings.FRONTEND_URL}/customer-area",
-            "cancelUrl": f"{settings.FRONTEND_URL}/checkout",
-        },
+            "successUrl": "https://www.dlsautopecas.com.br/catalogo",
+            "cancelUrl": "https://www.dlsautopecas.com.br/checkout",
+},
         "items": _checkout_items(order),
     }
 
